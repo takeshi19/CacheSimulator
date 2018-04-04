@@ -101,12 +101,17 @@ void initCache() {
   
 }
 
-
-/* TODO - COMPLETE THIS FUNCTION 
+/*  
  * freeCache - free each piece of memory you allocated using malloc 
  * inside initCache() function
  */
 void freeCache() {                      
+  //Free columns (each set holding columns), then free row (ptr to sets).
+  int i; 
+  for (i = 0; i < S; i++)
+    free(*(cache + i));
+  
+  free(cache);
 }
 
 /* TODO - COMPLETE THIS FUNCTION 
