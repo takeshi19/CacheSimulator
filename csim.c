@@ -86,7 +86,7 @@ cache_t cache;
  */
 void initCache() {
   /*cache represents a cache of S sets, E lines (2D array).*/                         
-  S = pow(2, s);
+  S = pow(s, 2);
   cache = malloc(sizeof(cache_set_t) * S);
   
   int i, j;  
@@ -117,11 +117,35 @@ void freeCache() {
 /* TODO - COMPLETE THIS FUNCTION 
  * accessData - Access data at memory address addr.
  *   If it is already in cache, increase hit_cnt
- *   If it is not in cache, bring it in cache, increase miss count.
- *   Also increase evict_cnt if a line is evicted.
+ *   If it is not in cache, bring it in cache, increase miss count (cold miss).
+ *   Also increase evict_cnt if a line is evicted (conflict miss).
  *   you will manipulate data structures allocated in initCache() here
  */
 void accessData(mem_addr_t addr) {                      
+  //TODO make sure to link the lines together.
+  
+  //Getting the last t bits of the address.
+  int i, j;  //Loop counters for 2D cache.
+  unsigned long long int tbits = addr >> (s + b);
+  //Searching through the whole cache for a block.
+  for (i = 0; i < S; i++) {
+    for (j = 0; j < E; j++) {
+      if ((*(*(cache+i)+j)).valid == 1 && (*(*(cache+i)+j)).tag == tbits) 
+        hit_cnt++;  //Increase the hit count if valid bit set and tags match.
+ /*     else if () {
+        //TODO eviction w/ LRU when all lines are full.
+      } */
+      else {
+	//If user tries accessing this area of cache again, then it's a hit.
+        (*(*(cache+i)+j)).valid = 1;
+	(*(*(cache+i)+j)).tag = tbits;
+	//Point to next line in linked list from w/i same set.
+	//TODO check if this is valid...
+	(*(*(cache+i)+j)).next = *(cache+i)+(j+1);
+	miss_cnt++;
+      }
+    }
+  }
 }
 
 /* TODO - FILL IN THE MISSING CODE
