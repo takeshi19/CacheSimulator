@@ -132,13 +132,16 @@ void accessData(mem_addr_t addr) {
       //Increase the hit count if valid bit set and tags match.
       if ((*(*(cache+i)+j)).valid == 1 && (*(*(cache+i)+j)).tag == tbits) 
         hit_cnt++;  
-      //The hit_cnt does not affect the LRU policy.
-      //The tail will always have oldest data.
-      //The head will always have newest data.
-      if (miss_cnt == E) { 
-	(*(*(cache+i)+((E-1)-j))).tag = tbits; //Replacing old data w/new data.
-	(*(*(cache+i)+(j-1))).next = NULL; //Setting prev line to pt to null. 
-	(*(*(cache+i)+((E-1)-j))).next = *(cache+i)+0; //Newest line is now head.	        
+      //The tail has newest data, head has oldest.
+      //In this case, the tbits don't match, & all lines full.
+      else if (miss_cnt == E) { 
+	/* Replace old data at head w/new data (becomes newest).
+	 * Unlink head from list to update the tail (newest node at tail).
+	 * Link the prior tail to new tail @ end of list.
+	 */
+	(*(*(cache+i)+0)).tag = tbits; 
+	(*(*(cache+i)+0)).next = NULL; 
+	(*(*(cache+i)+((E-1)-j))).next = *(cache+i)+0;         
 	evict_cnt++;         
       }  
       //For E lines in empty cache (per set), there are E misses.
@@ -146,12 +149,12 @@ void accessData(mem_addr_t addr) {
         //Creating the new line.
 	(*(*(cache+i)+j)).valid = 1;
 	(*(*(cache+i)+j)).tag = tbits;
-
+	//FIXME is the below if condition even necessary?
 	if (j+1 == E) //Setting the tail to null. 
 	  (*(*(cache+i)+j)).next = NULL; 
 	else  //Point to next line in linked list from w/i same set.
 	  (*(*(cache+i)+j)).next = *(cache+i)+(j+1);
-	
+	  //FIXME is the syntax above *(cache+i)+(j+1) correct?	
 	miss_cnt++;  //Record misses.
       }
     }
