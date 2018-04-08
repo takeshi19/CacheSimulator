@@ -114,49 +114,59 @@ void freeCache() {
   free(cache);
 }
 
-/* TODO - COMPLETE THIS FUNCTION 
+/* 
  * accessData - Access data at memory address addr.
  *   If it is already in cache, increase hit_cnt
  *   If it is not in cache, bring it in cache, increase miss count (cold miss).
- *   Also increase evict_cnt if a line is evicted (conflict miss).
+ *   Also increase evict_cnt if a line is evicted (capacity or conflict miss).
  *   you will manipulate data structures allocated in initCache() here
  */
 void accessData(mem_addr_t addr) {                      
-  int i, j;  //Loop counters for 2D cache.
+  int i, j;    //Loop counters for 2D cache.
+  bool isFull = false; //If all lines occupied, isFull is true, else false.
+ 
   //Getting the last t bits of the address.
   unsigned long long int tbits = addr >> (s + b);
   
+  //Cache no longer cold: if a request to load/store data from outside cache 
+   //occurs, and all lines occupied, then implement LRU policy for evictions.
+  if (miss_cnt >= E) 
+    isFull = true;
+
   //Searching through the whole cache for a block.
   for (i = 0; i < S; i++) {
     for (j = 0; j < E; j++) {
       //Increase the hit count if valid bit set and tags match.
-      if ((*(*(cache+i)+j)).valid == 1 && (*(*(cache+i)+j)).tag == tbits) 
+      //-found corresponding block. 
+      if ((*(*(cache+i)+j)).valid == 1 && (*(*(cache+i)+j)).tag == tbits) {
         hit_cnt++;  
+        continue;  //Skip below condition to avoid false conflict misses.
+      }
+      
       //The tail has newest data, head has oldest.
-      //In this case, the tbits don't match, & all lines full.
-      else if (miss_cnt == E) { 
-	/* Replace old data at head w/new data (becomes newest).
-	 * Unlink head from list to update the tail (newest node at tail).
-	 * Link the prior tail to new tail @ end of list.
-	 */
+      if (isFull) { 
+	//Replace old data at head w/new data (becomes newest).
+	//Unlink head from list to update the tail (newest node at tail).
+	//Link the prior tail to new tail @ end of list.
 	(*(*(cache+i)+0)).tag = tbits; 
 	(*(*(cache+i)+0)).next = NULL; 
 	(*(*(cache+i)+((E-1)-j))).next = *(cache+i)+0;         
+	//Increment  both evicts and misses because theres a conflict miss.
 	evict_cnt++;         
+	miss_cnt++;
       }  
-      //For E lines in empty cache (per set), there are E misses.
+      
+      //If valid bit not set, then cold miss (empty cache). 
       else {  
-        //Creating the new line.
+        //Creating the new line data.
 	(*(*(cache+i)+j)).valid = 1;
 	(*(*(cache+i)+j)).tag = tbits;
-	//FIXME is the below if condition even necessary?
-	if (j+1 == E) //Setting the tail to null. 
+	if (j+1 == E) //Setting the tail to point to null. 
 	  (*(*(cache+i)+j)).next = NULL; 
 	else  //Point to next line in linked list from w/i same set.
 	  (*(*(cache+i)+j)).next = *(cache+i)+(j+1);
-	  //FIXME is the syntax above *(cache+i)+(j+1) correct?	
 	miss_cnt++;  //Record misses.
-      }
+       }
     }
   }
 }
@@ -171,7 +181,7 @@ void accessData(mem_addr_t addr) {
  */
 void replayTrace(char* trace_fn) {                      
     char buf[1000];
-    mem_addr_t addr = 0;
+    mem_addr_t addr = 0;  //TODO use this address here. 
     unsigned int len = 0;
     FILE* trace_fp = fopen(trace_fn, "r");
 
@@ -182,19 +192,28 @@ void replayTrace(char* trace_fn) {
 
     while (fgets(buf, 1000, trace_fp) != NULL) {
         if (buf[1] == 'S' || buf[1] == 'L' || buf[1] == 'M') {
-            sscanf(buf+3, "%llx,%u", &addr, &len);
-      
+            sscanf(buf+3, "%llx,%u", &addr, &len);  //Initializing the addr
+      	
             if (verbosity)
                 printf("%c %llx,%u ", buf[1], addr, len);
 
-            // TODO - MISSING CODE
             // now you have: 
             // 1. address accessed in variable - addr 
             // 2. type of acccess(S/L/M)  in variable - buf[1] 
             // call accessData function here depending on type of access
-
+	    //FIXME What are we doing with addr here? Do we carve out the tbits here??
+	    
+	    //Access memory once for either a load or a store to memory.
+	    //Data storing writes data to mem (eviction++, miss++, or hit++).
+	    //Data loading reads data from mem (miss++ or hit++).   
+	    if (buf[1] == 'S' || buf[1] == 'L')
+	      accessData(addr); 
+	    if (buf[1] == 'M') {
+	      accessData(addr); //load 	      
+	      accessData(addr); //then store.
+	    }
             if (verbosity)
-                printf("\n");
+              printf("\n");
         }
     }
 
