@@ -122,27 +122,37 @@ void freeCache() {
  *   you will manipulate data structures allocated in initCache() here
  */
 void accessData(mem_addr_t addr) {                      
-  //TODO make sure to link the lines together.
-  
-  //Getting the last t bits of the address.
   int i, j;  //Loop counters for 2D cache.
+  //Getting the last t bits of the address.
   unsigned long long int tbits = addr >> (s + b);
+  
   //Searching through the whole cache for a block.
   for (i = 0; i < S; i++) {
     for (j = 0; j < E; j++) {
+      //Increase the hit count if valid bit set and tags match.
       if ((*(*(cache+i)+j)).valid == 1 && (*(*(cache+i)+j)).tag == tbits) 
-        hit_cnt++;  //Increase the hit count if valid bit set and tags match.
- /*     else if () {
-        //TODO eviction w/ LRU when all lines are full.
-      } */
-      else {
-	//If user tries accessing this area of cache again, then it's a hit.
-        (*(*(cache+i)+j)).valid = 1;
+        hit_cnt++;  
+      //The hit_cnt does not affect the LRU policy.
+      //The tail will always have oldest data.
+      //The head will always have newest data.
+      if (miss_cnt == E) { 
+	(*(*(cache+i)+((E-1)-j))).tag = tbits; //Replacing old data w/new data.
+	(*(*(cache+i)+(j-1))).next = NULL; //Setting prev line to pt to null. 
+	(*(*(cache+i)+((E-1)-j))).next = *(cache+i)+0; //Newest line is now head.	        
+	evict_cnt++;         
+      }  
+      //For E lines in empty cache (per set), there are E misses.
+      else {  
+        //Creating the new line.
+	(*(*(cache+i)+j)).valid = 1;
 	(*(*(cache+i)+j)).tag = tbits;
-	//Point to next line in linked list from w/i same set.
-	//TODO check if this is valid...
-	(*(*(cache+i)+j)).next = *(cache+i)+(j+1);
-	miss_cnt++;
+
+	if (j+1 == E) //Setting the tail to null. 
+	  (*(*(cache+i)+j)).next = NULL; 
+	else  //Point to next line in linked list from w/i same set.
+	  (*(*(cache+i)+j)).next = *(cache+i)+(j+1);
+	
+	miss_cnt++;  //Record misses.
       }
     }
   }
