@@ -1,6 +1,6 @@
-/* Name:
- * CS login:
- * Section(s):
+/* Name: Manuel Takeshi Gomez
+ * CS login: gomez
+ * Section(s): CS 354 Spring 2018 
  *
  * csim.c - A cache simulator that can replay traces from Valgrind
  *     and output statistics such as number of hits, misses, and
@@ -98,7 +98,6 @@ void initCache() {
       (*(*(cache + i) + j)).next = NULL; //No lines are set, next is nulled.
     } 
   }
-  
 }
 
 /*  
@@ -122,57 +121,65 @@ void freeCache() {
  *   you will manipulate data structures allocated in initCache() here
  */
 void accessData(mem_addr_t addr) {                      
-  int i, j;    //Loop counters for 2D cache.
-  bool isFull = false; //If all lines occupied, isFull is true, else false.
- 
-  //Getting the last t bits of the address.
-  unsigned long long int tbits = addr >> (s + b);
+  int i, j;               //Loop counters for 2D cache.
+  int takenline;          //If all lines are taken, then do an eviction.
+  unsigned long long int tbits = addr >> (s + b); //Get last t bits of addr.
+  s = log(S)/log(2);      //Extracting the set index given S sets.
+  cache_line_t *lineptr;  //A pointer to access the lines of sets.
   
-  //Cache no longer cold: if a request to load/store data from outside cache 
-   //occurs, and all lines occupied, then implement LRU policy for evictions.
-  if (miss_cnt >= E) 
-    isFull = true;
-
-  //Searching through the whole cache for a block.
+  //Searching for the correct set to get data from.
   for (i = 0; i < S; i++) {
-    for (j = 0; j < E; j++) {
-      //Increase the hit count if valid bit set and tags match.
-      //-found corresponding block. 
-      if ((*(*(cache+i)+j)).valid == 1 && (*(*(cache+i)+j)).tag == tbits) {
-        hit_cnt++;  
-        continue;  //Skip below condition to avoid false conflict misses.
-      }
-      
-      //The tail has newest data, head has oldest.
-      if (isFull) { 
-	//Replace old data at head w/new data (becomes newest).
-	//Unlink head from list to update the tail (newest node at tail).
-	//Link the prior tail to new tail @ end of list.
-	(*(*(cache+i)+0)).tag = tbits; 
-	(*(*(cache+i)+0)).next = NULL; 
-	(*(*(cache+i)+((E-1)-j))).next = *(cache+i)+0;         
-	//Increment  both evicts and misses because theres a conflict miss.
-	evict_cnt++;         
-	miss_cnt++;
-      }  
-      
-      //If valid bit not set, then cold miss (empty cache). 
-      else {  
-        //Creating the new line data.
-	(*(*(cache+i)+j)).valid = 1;
-	(*(*(cache+i)+j)).tag = tbits;
-	if (j+1 == E) //Setting the tail to point to null. 
-	  (*(*(cache+i)+j)).next = NULL; 
-	else  //Point to next line in linked list from w/i same set.
-	  (*(*(cache+i)+j)).next = *(cache+i)+(j+1);
-	miss_cnt++;  //Record misses.
-       }
+    //Finally reahed valid set index, go to lines: 
+    if (i == s) {
+        lineptr = *(cache + i);  //Points to 1st line out of E lines in set s.
+	while (j < E) { 
+	  //Increment the number of busy lines to do a possible LRU evict.
+          if (lineptr->valid == 1) 
+	    takenline++;
+          //We have a hit:
+          if (tbits == lineptr->tag && lineptr->valid == 1) { 
+	    hit_cnt++;
+	    break; 
+          }
+	  //An addr to data outside of cache is requested on a full set, evict:
+          //if (isFull) {
+	  if (takenline == E) {
+            //Replace old data at head w/new data (becomes newest).
+	    lineptr->tag = tbits; 
+	    //Unlink head from list to update the tail (newest node at tail).
+	    lineptr->next = NULL;
+	    //Link the prior tail to recently updated node/line.
+	    (lineptr + (E-1))->next = lineptr; //TODO find out if this is correct or nah (syntax)
+            //Increment  both evicts and misses because of  conflict/capacity miss.
+	    evict_cnt++;
+	    miss_cnt++; 
+          }
+          //Cold miss:
+          if (lineptr->valid == 0) {
+	    //Move to next free line in linked list (partially cold):
+	    while (!(lineptr->tag == 0)) 
+	      lineptr = (cache_line_t *)lineptr->next; 
+  	    
+            //Create the line with its data:
+            lineptr->tag = tbits;
+            lineptr->valid = 1;
+	    //If not last line in linked list, set next appropriately.
+            //else, it's next is null (at end of list). 
+            if (!((j + 1) == E)) 
+              lineptr->next = (cache_line_t *)lineptr + j; 
+	    miss_cnt++;
+          }
+	  j++;  //TODO is the below syntax correct?
+	  lineptr = lineptr + j; //Move ptr to next node in linked list. 
+	}
     }
   }
 }
 
-/* TODO - FILL IN THE MISSING CODE
+
+/* 
  * replayTrace - replays the given trace file against the cache 
+E
  * reads the input trace file line by line
  * extracts the type of each memory access : L/S/M
  * YOU MUST TRANSLATE one "L" as a load i.e. 1 memory access
@@ -181,7 +188,7 @@ void accessData(mem_addr_t addr) {
  */
 void replayTrace(char* trace_fn) {                      
     char buf[1000];
-    mem_addr_t addr = 0;  //TODO use this address here. 
+    mem_addr_t addr = 0;  
     unsigned int len = 0;
     FILE* trace_fp = fopen(trace_fn, "r");
 
@@ -196,12 +203,6 @@ void replayTrace(char* trace_fn) {
       	
             if (verbosity)
                 printf("%c %llx,%u ", buf[1], addr, len);
-
-            // now you have: 
-            // 1. address accessed in variable - addr 
-            // 2. type of acccess(S/L/M)  in variable - buf[1] 
-            // call accessData function here depending on type of access
-	    //FIXME What are we doing with addr here? Do we carve out the tbits here??
 	    
 	    //Access memory once for either a load or a store to memory.
 	    //Data storing writes data to mem (eviction++, miss++, or hit++).
