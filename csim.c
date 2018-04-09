@@ -121,65 +121,57 @@ void freeCache() {
  *   you will manipulate data structures allocated in initCache() here
  */
 void accessData(mem_addr_t addr) {                      
-  int i, j;               //Loop counters for 2D cache.
+  int j;               //Loop counters for 2D cache.
   int takenline;          //If all lines are taken, then do an eviction.
   unsigned long long int tbits = addr >> (s + b); //Get last t bits of addr.
-  s = log(S)/log(2);      //Extracting the set index given S sets.
   cache_line_t *lineptr;  //A pointer to access the lines of sets.
   
-  //Searching for the correct set to get data from.
-  for (i = 0; i < S; i++) {
-    //Finally reahed valid set index, go to lines: 
-    if (i == s) {
-        lineptr = *(cache + i);  //Points to 1st line out of E lines in set s.
-	while (j < E) { 
-	  //Increment the number of busy lines to do a possible LRU evict.
-          if (lineptr->valid == 1) 
-	    takenline++;
-          //We have a hit:
-          if (tbits == lineptr->tag && lineptr->valid == 1) { 
-	    hit_cnt++;
-	    break; 
-          }
-	  //An addr to data outside of cache is requested on a full set, evict:
-          //if (isFull) {
-	  if (takenline == E) {
-            //Replace old data at head w/new data (becomes newest).
-	    lineptr->tag = tbits; 
-	    //Unlink head from list to update the tail (newest node at tail).
-	    lineptr->next = NULL;
-	    //Link the prior tail to recently updated node/line.
-	    (lineptr + (E-1))->next = lineptr; //TODO find out if this is correct or nah (syntax)
-            //Increment  both evicts and misses because of  conflict/capacity miss.
-	    evict_cnt++;
-	    miss_cnt++; 
-          }
-          //Cold miss:
-          if (lineptr->valid == 0) {
-	    //Move to next free line in linked list (partially cold):
-	    while (!(lineptr->tag == 0)) 
-	      lineptr = (cache_line_t *)lineptr->next; 
-  	    
-            //Create the line with its data:
-            lineptr->tag = tbits;
-            lineptr->valid = 1;
-	    //If not last line in linked list, set next appropriately.
-            //else, it's next is null (at end of list). 
-            if (!((j + 1) == E)) 
-              lineptr->next = (cache_line_t *)lineptr + j; 
-	    miss_cnt++;
-          }
-	  j++;  //TODO is the below syntax correct?
-	  lineptr = lineptr + j; //Move ptr to next node in linked list. 
+    lineptr = *(cache + s);  //Points to 1st line out of E lines in set s.
+    while (j < E) { 
+      //Increment the number of busy lines to do a possible LRU evict.
+      if (lineptr->valid == 1) 
+        takenline++;
+        //We have a hit:
+      if (tbits == lineptr->tag && lineptr->valid == 1) { 
+        hit_cnt++;
+	break; 
+      }
+	//An addr to data outside of cache is requested on a full set, evict:
+	if (takenline == E) {
+	  cache_line_t* head = lineptr - (E-1); //Points to head of list.
+	  cache_line_t* tail = lineptr;         //Points to tail of list.
+	    
+	  //Unlink head from list to update the tail (newest node at tail).
+	  head->next = NULL; 
+          //Replace old data at head w/new data (becomes newest).
+	  head->tag = tbits;
+	  //Link the prior tail to recently updated node/line.
+          tail->next = head;
+	  //Increment  both evicts and misses because of  conflict/capacity miss.
+	  evict_cnt++;
+	  miss_cnt++; 
+        }
+        //Cold miss:
+        if (lineptr->valid == 0) {
+          //Create the line with its data:
+          lineptr->tag = tbits;
+          lineptr->valid = 1;
+	  //If not last line in linked list, set next appropriately.
+          //else, it's next is null (at end of list). 
+          if ((j + 1) != E)  
+            lineptr->next = (cache_line_t *)lineptr + 1; 
+	  miss_cnt++;
 	}
-    }
-  }
+	j++;  
+	lineptr = lineptr->next; //Move ptr to next node in linked list. 
+      }
+    
 }
 
 
 /* 
  * replayTrace - replays the given trace file against the cache 
-E
+
  * reads the input trace file line by line
  * extracts the type of each memory access : L/S/M
  * YOU MUST TRANSLATE one "L" as a load i.e. 1 memory access
