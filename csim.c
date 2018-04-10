@@ -123,50 +123,75 @@ void freeCache() {
 void accessData(mem_addr_t addr) {                      
   int j;               //Loop counters for 2D cache.
   int takenline;          //If all lines are taken, then do an eviction.
-  unsigned long long int tbits = addr >> (s + b); //Get last t bits of addr.
+  mem_addr_t tbits = addr >> (s + b); //Get last t bits of addr.
+  mem_addr_t setIdx = addr << tbits;
+  setIdx = setIdx >> (tbits + b); 
+  int x = (int)setIdx;
+  printf("Setidx: ");
+  printf("%d", x);
+  printf("\n");
   cache_line_t *lineptr;  //A pointer to access the lines of sets.
-  
-    lineptr = *(cache + s);  //Points to 1st line out of E lines in set s.
-    while (j < E) { 
-      //Increment the number of busy lines to do a possible LRU evict.
-      if (lineptr->valid == 1) 
-        takenline++;
-        //We have a hit:
-      if (tbits == lineptr->tag && lineptr->valid == 1) { 
-        hit_cnt++;
-	break; 
-      }
-	//An addr to data outside of cache is requested on a full set, evict:
-	if (takenline == E) {
-	  cache_line_t* head = lineptr - (E-1); //Points to head of list.
-	  cache_line_t* tail = lineptr;         //Points to tail of list.
-	    
-	  //Unlink head from list to update the tail (newest node at tail).
-	  head->next = NULL; 
-          //Replace old data at head w/new data (becomes newest).
-	  head->tag = tbits;
-	  //Link the prior tail to recently updated node/line.
-          tail->next = head;
-	  //Increment  both evicts and misses because of  conflict/capacity miss.
-	  evict_cnt++;
-	  miss_cnt++; 
-        }
-        //Cold miss:
-        if (lineptr->valid == 0) {
-          //Create the line with its data:
-          lineptr->tag = tbits;
-          lineptr->valid = 1;
-	  //If not last line in linked list, set next appropriately.
-          //else, it's next is null (at end of list). 
-          if ((j + 1) != E)  
-            lineptr->next = (cache_line_t *)lineptr + 1; 
-	  miss_cnt++;
-	}
-	j++;  
-	lineptr = lineptr->next; //Move ptr to next node in linked list. 
-      }
-    
+  cache_line_t *head;     //A pointer to head of linked list.
+  cache_line_t *tail;     //A pointer to tail of linked list.
+  cache_line_t *newHead;  //Backup pointer to head of list.
+  cache_line_t *newTail;  //Backup pointer to tail of list.
+ 
+   //3. FIXME Update linked list when u have a hit. 
+   //4. FIXME Make a case for when E = 1.
+  lineptr = *(cache + setIdx);  //Points to head node of E lines in set setIdx.
+  while (j < E) { 
+    //Increment the number of busy lines to do a possible LRU evict.
+    if (lineptr->valid == 1) 
+      takenline++;
+    //We have a hit:
+    if (tbits == lineptr->tag && lineptr->valid == 1) { 
+      newTail = curr;
+      tail->next = newTail;
+      head->next = newTail->next;
+      newTail->next = NULL;
+
+      tail = newTail; //Update tail after updating linked list.
+      *(cache + setIdx) = head; //Updating cache. 
+      hit_cnt++;
+      break; 
+    }
+    //An addr to data outside of cache is requested on a full set, evict:
+    if (takenline == E) {
+      //Replace old data at head w/new data (becomes newest).
+      //Unlink head from list to update the tail (newest node at tail).
+      //Link the prior tail to recently updated node/line.
+      head->tag = tbits;
+      newHead = head->next;
+      newTail = head;
+      tail->next = newTail;
+      newTail->next = NULL;
+
+      //Updating head and tail pointers after rearranging list:
+      head = newHead;
+      tail = newTail;
+      *(cache + setIdx) = head; //Updating cache. 
+      
+      //Increment  both evicts and misses because of  conflict/capacity miss.
+      evict_cnt++;
+      miss_cnt++; 
+    }
+    //Cold miss:
+    if (lineptr->valid == 0) {
+      //Create the line with its data:
+      lineptr->tag = tbits;
+      lineptr->valid = 1;
+      //If not last line in linked list, set next appropriately.
+      //else, it's next is null (at end of list). 
+      if ((j + 1) != E)  
+        lineptr->next = (cache_line_t *)lineptr + 1; 
+      miss_cnt++;
+    }
+
+    j++;  
+    lineptr = lineptr->next; //Move ptr to next node in linked list. 
+  }
 }
+
 
 
 /* 
@@ -193,7 +218,7 @@ void replayTrace(char* trace_fn) {
         if (buf[1] == 'S' || buf[1] == 'L' || buf[1] == 'M') {
             sscanf(buf+3, "%llx,%u", &addr, &len);  //Initializing the addr
       	
-            if (verbosity)
+           if (verbosity)
                 printf("%c %llx,%u ", buf[1], addr, len);
 	    
 	    //Access memory once for either a load or a store to memory.
