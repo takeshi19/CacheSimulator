@@ -121,37 +121,41 @@ void freeCache() {
  *   you will manipulate data structures allocated in initCache() here
  */
 void accessData(mem_addr_t addr) {                      
-  int j;               //Loop counters for 2D cache.
-  int takenline;          //If all lines are taken, then do an eviction.
+  int j;          //Loop counter.
+  int takenline;  //If all lines are taken, then do an eviction.
   mem_addr_t tbits = addr >> (s + b); //Get last t bits of addr.
-  mem_addr_t setIdx = addr << tbits;
+  mem_addr_t setIdx = addr << tbits;  //Get the set to index into of cache.
   setIdx = setIdx >> (tbits + b); 
-  int x = (int)setIdx;
-  printf("Setidx: ");
-  printf("%d", x);
-  printf("\n");
+  
   cache_line_t *lineptr;  //A pointer to access the lines of sets.
   cache_line_t *head;     //A pointer to head of linked list.
   cache_line_t *tail;     //A pointer to tail of linked list.
   cache_line_t *newHead;  //Backup pointer to head of list.
   cache_line_t *newTail;  //Backup pointer to tail of list.
  
-   //3. FIXME Update linked list when u have a hit. 
-   //4. FIXME Make a case for when E = 1.
   lineptr = *(cache + setIdx);  //Points to head node of E lines in set setIdx.
-  while (j < E) { 
+  while (lineptr != NULL) {     //Break loop when lineptr goes off list.
     //Increment the number of busy lines to do a possible LRU evict.
-    if (lineptr->valid == 1) 
+    if (lineptr == NULL) 
+      printf("OUR LINEPTR IS NULL. ERROR.\n");
+    else 
+	printf("Ok, the lineptr isnt null\n");
+    if ((lineptr->valid) == 1) //FIXME GETTING A SFAULT ON THIS LINE. 
       takenline++;
     //We have a hit:
     if (tbits == lineptr->tag && lineptr->valid == 1) { 
-      newTail = curr;
-      tail->next = newTail;
-      head->next = newTail->next;
-      newTail->next = NULL;
-
-      tail = newTail; //Update tail after updating linked list.
-      *(cache + setIdx) = head; //Updating cache. 
+      if (E > 1) { 
+        //Hit on current line, current line becomes tail.
+        newTail = lineptr;
+        tail->next = newTail;
+        head->next = newTail->next;
+        newTail->next = NULL;
+  
+        tail = newTail; //Update tail after updating linked list.
+        *(cache + setIdx) = head; //Updating cache. 
+      }
+      else //No head and tail needed when E = 1.
+        *(cache + setIdx) = lineptr;
       hit_cnt++;
       break; 
     }
@@ -160,17 +164,22 @@ void accessData(mem_addr_t addr) {
       //Replace old data at head w/new data (becomes newest).
       //Unlink head from list to update the tail (newest node at tail).
       //Link the prior tail to recently updated node/line.
-      head->tag = tbits;
-      newHead = head->next;
-      newTail = head;
-      tail->next = newTail;
-      newTail->next = NULL;
-
-      //Updating head and tail pointers after rearranging list:
-      head = newHead;
-      tail = newTail;
-      *(cache + setIdx) = head; //Updating cache. 
+      if (E > 1) {
+        head->tag = tbits;
+        newHead = head->next;
+        newTail = head;
+        tail->next = newTail;
+        newTail->next = NULL;
       
+        //Updating head and tail pointers after rearranging list:
+        head = newHead;
+        tail = newTail;
+        *(cache + setIdx) = head; //Updating cache. 
+      }
+      else {  //No head and tail needed when E = 1.
+        lineptr->tag = tbits;
+        *(cache + setIdx) = lineptr;
+      }
       //Increment  both evicts and misses because of  conflict/capacity miss.
       evict_cnt++;
       miss_cnt++; 
@@ -180,14 +189,12 @@ void accessData(mem_addr_t addr) {
       //Create the line with its data:
       lineptr->tag = tbits;
       lineptr->valid = 1;
-      //If not last line in linked list, set next appropriately.
-      //else, it's next is null (at end of list). 
-      if ((j + 1) != E)  
-        lineptr->next = (cache_line_t *)lineptr + 1; 
+      //Update the next pointer of curr line. 
+      if ((j+1) != E) 
+        lineptr->next = (cache_line_t *)lineptr + 1; //FIXME could our segault stem from this syntax???
       miss_cnt++;
     }
-
-    j++;  
+    j++;
     lineptr = lineptr->next; //Move ptr to next node in linked list. 
   }
 }
