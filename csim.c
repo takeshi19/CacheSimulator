@@ -65,7 +65,7 @@ typedef unsigned long long int mem_addr_t;
  * you might want to have a field "struct cache_line * next" in the struct 
  */
 typedef struct cache_line {                     
-    char valid;
+    int valid;
     mem_addr_t tag;
     struct cache_line * next; //cache_line pointer to next cache_line in linked-list
 } cache_line_t;
@@ -121,27 +121,29 @@ void freeCache() {
  *   you will manipulate data structures allocated in initCache() here
  */
 void accessData(mem_addr_t addr) {                      
-  int j;          //Loop counter.
-  int takenline;  //If all lines are taken, then do an eviction.
+  int j = 0;          //Loop counter.
+  int takenline=0;  //If all lines are taken, then do an eviction.
   mem_addr_t tbits = addr >> (s + b); //Get last t bits of addr.
-  mem_addr_t setIdx = addr << tbits;  //Get the set to index into of cache.
-  setIdx = setIdx >> (tbits + b); 
-  
+  int t = 64 - (b + s);
+  mem_addr_t setIdx_2 = addr << t;
+  mem_addr_t setIdx = setIdx_2 >> (t + b);
+
   cache_line_t *lineptr;  //A pointer to access the lines of sets.
   cache_line_t *head;     //A pointer to head of linked list.
   cache_line_t *tail;     //A pointer to tail of linked list.
   cache_line_t *newHead;  //Backup pointer to head of list.
   cache_line_t *newTail;  //Backup pointer to tail of list.
  
-  lineptr = *(cache + setIdx);  //Points to head node of E lines in set setIdx.
+  //Initializing the head, tail, and curr pointers: 
+  head = &cache[setIdx][0]; //
+  tail = &cache[setIdx][E-1];
+  lineptr = &cache[setIdx][0];
+
   while (lineptr != NULL) {     //Break loop when lineptr goes off list.
     //Increment the number of busy lines to do a possible LRU evict.
-    if (lineptr == NULL) 
-      printf("OUR LINEPTR IS NULL. ERROR.\n");
-    else 
-	printf("Ok, the lineptr isnt null\n");
-    if ((lineptr->valid) == 1) //FIXME GETTING A SFAULT ON THIS LINE. 
+    if ((cache[setIdx][j].valid) == 1) 
       takenline++;
+
     //We have a hit:
     if (tbits == lineptr->tag && lineptr->valid == 1) { 
       if (E > 1) { 
@@ -159,6 +161,7 @@ void accessData(mem_addr_t addr) {
       hit_cnt++;
       break; 
     }
+
     //An addr to data outside of cache is requested on a full set, evict:
     if (takenline == E) {
       //Replace old data at head w/new data (becomes newest).
@@ -182,23 +185,25 @@ void accessData(mem_addr_t addr) {
       }
       //Increment  both evicts and misses because of  conflict/capacity miss.
       evict_cnt++;
-      miss_cnt++; 
+      miss_cnt++;
+//      break;  //No need to search list anymore after eviction. 
     }
+
     //Cold miss:
     if (lineptr->valid == 0) {
       //Create the line with its data:
       lineptr->tag = tbits;
       lineptr->valid = 1;
+      
       //Update the next pointer of curr line. 
       if ((j+1) != E) 
-        lineptr->next = (cache_line_t *)lineptr + 1; //FIXME could our segault stem from this syntax???
+        lineptr->next = (cache_line_t *)lineptr + 1;   
       miss_cnt++;
     }
     j++;
     lineptr = lineptr->next; //Move ptr to next node in linked list. 
   }
 }
-
 
 
 /* 
