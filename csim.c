@@ -135,7 +135,6 @@ void accessData(mem_addr_t addr) {
   cache_line_t *currLine; 
   cache_line_t *head;   
   cache_line_t *tail;  
-  cache_line_t *newHead;
   cache_line_t *newTail;  
   
   //Initializing the head, tail, and curr pointers: 
@@ -201,6 +200,8 @@ void accessData(mem_addr_t addr) {
           (head->next)->prev = head;
 	}
 	else {
+	  //Backup node pointer to keep list intact.
+	  cache_line_t *prevNode; 
 	  prevNode = currLine->prev;
 	  prevNode->next = (cache_line_t *)currLine+1;
 	  (prevNode->next)->prev = prevNode;
@@ -231,7 +232,7 @@ void accessData(mem_addr_t addr) {
     
     //Increase the chance for an eviction:
     else {
-      takenLines++;
+      linesTaken++;
     }
     currLine = currLine->next;  
   }
