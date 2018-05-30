@@ -65,37 +65,40 @@ typedef unsigned long long int mem_addr_t;
  * you might want to have a field "struct cache_line * next" in the struct 
  */
 typedef struct cache_line {                     
-    int valid;
+    int valid;  
     mem_addr_t tag;
-    struct cache_line * next; //cache_line pointer to next cache_line in linked-list
+    struct cache_line * next;
+    struct cache_line * prev;
 } cache_line_t;
 
-//Other representations of our structure above.
+//Pointer to the set, then the double pointer to the line within the set.
 typedef cache_line_t* cache_set_t;
-typedef cache_set_t* cache_t;
+typedef cache_set_t* cache_t;//TODO idk if the above commt is valid, but ill findout later.
 
-/* The cache we are simulating (a double pointer)*/
+//The cache we are simulating (a double pointer):
 cache_t cache;  
 
 /* 
- * initCache - 
+ * initCache - TODO fixx all of this shitty broken code please. 
  * Allocate data structures to hold info regrading the sets and cache lines
  * use struct "cache_line_t" here
  * Initialize valid and tag field with 0s.
  * use S (= 2^s) and E while allocating the data structures here
  */
 void initCache() {
-  /*cache represents a cache of S sets, E lines (2D array).*/                         
+  //cache represents a cache of S sets, E lines (2D array).                         
   S = pow(s, 2);
+  //Now we have S set pointers:
   cache = malloc(sizeof(cache_set_t) * S);
-  
+    
   int i, j;  
   for (i = 0; i < S; i++) { 
     *(cache + i) = malloc(sizeof(cache_line_t) * E);
     for (j = 0; j < E; j++) {
       (*(*(cache + i) + j)).tag = 0;
       (*(*(cache + i) + j)).valid = 0;
-      (*(*(cache + i) + j)).next = NULL; //No lines are set, next is nulled.
+      (*(*(cache + i) + j)).next = NULL; 
+      (*(*(cache + i) + j)).prev = NULL; 
     } 
   }
 }
@@ -118,90 +121,145 @@ void freeCache() {
  *   If it is already in cache, increase hit_cnt
  *   If it is not in cache, bring it in cache, increase miss count (cold miss).
  *   Also increase evict_cnt if a line is evicted (capacity or conflict miss).
- *   you will manipulate data structures allocated in initCache() here
  */
 void accessData(mem_addr_t addr) {                      
-  int j = 0;          //Loop counter.
-  int takenline=0;  //If all lines are taken, then do an eviction.
-  mem_addr_t tbits = addr >> (s + b); //Get last t bits of addr.
+  int linesTaken = 0;  
+  mem_addr_t tbits = addr >> (s + b); 
+  
+  //Extracting the set index bits:
   int t = 64 - (b + s);
   mem_addr_t setIdx_2 = addr << t;
   mem_addr_t setIdx = setIdx_2 >> (t + b);
-
-  cache_line_t *lineptr;  //A pointer to access the lines of sets.
-  cache_line_t *head;     //A pointer to head of linked list.
-  cache_line_t *tail;     //A pointer to tail of linked list.
-  cache_line_t *newHead;  //Backup pointer to head of list.
-  cache_line_t *newTail;  //Backup pointer to tail of list.
- 
-  //Initializing the head, tail, and curr pointers: 
-  head = &cache[setIdx][0]; //
-  tail = &cache[setIdx][E-1];
-  lineptr = &cache[setIdx][0];
-
-  while (lineptr != NULL) {     //Break loop when lineptr goes off list.
-    //Increment the number of busy lines to do a possible LRU evict.
-    if ((cache[setIdx][j].valid) == 1) 
-      takenline++;
-
-    //We have a hit:
-    if (tbits == lineptr->tag && lineptr->valid == 1) { 
-      if (E > 1) { 
-        //Hit on current line, current line becomes tail.
-        newTail = lineptr;
-        tail->next = newTail;
-        head->next = newTail->next;
-        newTail->next = NULL;
   
-        tail = newTail; //Update tail after updating linked list.
-        *(cache + setIdx) = head; //Updating cache. 
+  //Various pointer to our linkedlist:
+  cache_line_t *currLine; 
+  cache_line_t *head;   
+  cache_line_t *tail;  
+  cache_line_t *newHead;
+  cache_line_t *newTail;  
+  
+  //Initializing the head, tail, and curr pointers: 
+  head = &cache[setIdx][0]; 
+  tail = &cache[setIdx][E-1];
+  currLine = &cache[setIdx][0];  
+
+  //TODO 3: Test, use gdb, cry, rinse and repeat.
+  //Iterating through the lines of respective set:
+  while (currLine != NULL) {    
+    //Cache hit:
+    if (tbits == currLine->tag) { 
+      if (E > 2) { 
+ 	if (currLine == tail) {
+	  tail->next = head;
+	  head->prev = tail;
+	  newTail = tail->prev;
+	  newTail->next = NULL;
+	  tail->prev = NULL;
+	  tail = newTail;
+	  head = head->prev;
+	}	
+	else if (currLine != head && currLine != tail) {
+	  (currLine->prev)->next = currLine->next;
+	  (currLine->next)->prev = currLine->prev; 
+	  currLine->next = head;
+	  currLine->prev = NULL;
+	  head->prev = currLine;
+	  head = currLine;  
+	}
       }
-      else //No head and tail needed when E = 1.
-        *(cache + setIdx) = lineptr;
+      else if (E == 2) {
+	if (currLine == tail) {
+	  tail->next = head;
+	  head = head->next;
+	  tail = tail->next;
+	  tail->next = NULL;
+	}
+      }
+      //Updating the cache:
+      *(cache + setIdx) = head; //TODO learn if this works. 
       hit_cnt++;
-      break; 
     }
-
-    //An addr to data outside of cache is requested on a full set, evict:
-    if (takenline == E) {
-      //Replace old data at head w/new data (becomes newest).
-      //Unlink head from list to update the tail (newest node at tail).
-      //Link the prior tail to recently updated node/line.
-      if (E > 1) {
-        head->tag = tbits;
-        newHead = head->next;
-        newTail = head;
-        tail->next = newTail;
-        newTail->next = NULL;
-      
-        //Updating head and tail pointers after rearranging list:
-        head = newHead;
-        tail = newTail;
-        *(cache + setIdx) = head; //Updating cache. 
-      }
-      else {  //No head and tail needed when E = 1.
-        lineptr->tag = tbits;
-        *(cache + setIdx) = lineptr;
-      }
-      //Increment  both evicts and misses because of  conflict/capacity miss.
-      evict_cnt++;
-      miss_cnt++;
-//      break;  //No need to search list anymore after eviction. 
-    }
-
+    
     //Cold miss:
-    if (lineptr->valid == 0) {
+    else if (currLine->valid == 0) {
       //Create the line with its data:
-      lineptr->tag = tbits;
-      lineptr->valid = 1;
+      currLine->tag = tbits;	
+      currLine->valid = 1;
       
-      //Update the next pointer of curr line. 
-      if ((j+1) != E) 
-        lineptr->next = (cache_line_t *)lineptr + 1;   
+      if (E > 2) {
+        if (currLine == tail) {
+	  tail->next = head;
+	  head->prev = tail;
+	  newTail = tail->prev;
+	  newTail->next = NULL;
+	  tail->prev = NULL;
+	  tail = newTail;
+	  head = head->prev;
+        }
+	else if (currLine == head) {
+	  head->next = (cache_line_t *)currLine+1; //TODO learn if this works.
+          (head->next)->prev = head;
+	}
+	else {
+	  prevNode = currLine->prev;
+	  prevNode->next = (cache_line_t *)currLine+1;
+	  (prevNode->next)->prev = prevNode;
+	  currLine->next = head;
+	  currLine->prev = NULL;
+	  head = currLine;
+	}
+      }
+      if (E == 2) {
+	if (currLine == tail) {
+          tail->next = head;
+	  head->prev = tail;
+	  newTail = tail->prev;
+	  newTail->next = NULL;
+	  tail->prev = NULL;
+	  tail = newTail;
+	  head = head->prev;
+	}
+	else {
+          head->next = (cache_line_t *)currLine+1;
+          (head->next)->prev = head;
+	}
+      }
+      *(cache + setIdx) = head;  
       miss_cnt++;
+      break;  
     }
-    j++;
-    lineptr = lineptr->next; //Move ptr to next node in linked list. 
+    
+    //Increase the chance for an eviction:
+    else {
+      takenLines++;
+    }
+    currLine = currLine->next;  
+  }
+  
+  //TODO 4: Fix and optimize the cache eviction case
+  //TODO 5: Test eviction case, cry, gdb, etc...
+  //
+  //Cache eviction:
+  if (linesTaken == E) {
+    if (E > 1) {
+      //Replace old data with new data:
+      tail->tag = tbits;  
+      
+      tail->next = head;
+      head->prev = tail;
+      newTail = tail->prev;
+      newTail->next = NULL;
+      tail->prev = NULL;
+      tail = newTail;
+      head = head->prev;
+    }
+    else { 
+      head->tag = tbits;
+    }
+    *(cache + setIdx) = head;
+    //Evictions also infer cache misses: 
+    evict_cnt++;
+    miss_cnt++;
   }
 }
 
