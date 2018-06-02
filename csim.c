@@ -90,7 +90,7 @@ void initCache() {
   S = pow(s, 2);
   //Now we have S set pointers:
   cache = malloc(sizeof(cache_set_t) * S);
-    
+  
   int i, j;  
   for (i = 0; i < S; i++) { 
     *(cache + i) = malloc(sizeof(cache_line_t) * E);
@@ -108,11 +108,18 @@ void initCache() {
  * inside initCache() function
  */
 void freeCache() {                      
-  //Free columns (each set holding columns), then free row (ptr to sets).
-  int i; 
-  for (i = 0; i < S; i++)
-    free(*(cache + i));
-  
+  int i;
+  cache_line_t *curr = NULL;
+  cache_line_t *next =  curr;
+
+  for (i = 0; i < S; i++) {
+    curr = &cache[i][0];
+    while (next != NULL) {
+      next = curr->next;
+      free(curr);
+      curr = next;
+    }
+  } 
   free(cache);
 }
 
@@ -145,7 +152,7 @@ void accessData(mem_addr_t addr) {
   //TODO 3: Test, use gdb, cry, rinse and repeat.
   //Iterating through the lines of respective set:
   while (currLine != NULL) {    
-    //Cache hit:
+     //Cache hit:
     if (tbits == currLine->tag) { 
       if (E > 2) { 
  	if (currLine == tail) {
@@ -166,16 +173,18 @@ void accessData(mem_addr_t addr) {
 	  head = currLine;  
 	}
       }
-      else if (E == 2) {
+      else if (E == 2) {  
 	if (currLine == tail) {
 	  tail->next = head;
+	  head->prev = tail;
 	  head = head->next;
 	  tail = tail->next;
+	  head->prev = NULL;
 	  tail->next = NULL;
 	}
       }
       //Updating the cache:
-      *(cache + setIdx) = head; //TODO learn if this works. 
+      *(cache + setIdx) = head; 
       hit_cnt++;
     }
     
@@ -184,19 +193,20 @@ void accessData(mem_addr_t addr) {
       //Create the line with its data:
       currLine->tag = tbits;	
       currLine->valid = 1;
-      
+
       if (E > 2) {
         if (currLine == tail) {
 	  tail->next = head;
 	  head->prev = tail;
 	  newTail = tail->prev;
 	  newTail->next = NULL;
-	  tail->prev = NULL;
+	  printf("E > 2, how is this possible?\n");
+	  tail->prev = NULL; //FIXME here for l8r as well. 3
 	  tail = newTail;
 	  head = head->prev;
         }
 	else if (currLine == head) {
-	  head->next = (cache_line_t *)currLine+1; //TODO learn if this works.
+	  head->next = (cache_line_t *)currLine+1; 
           (head->next)->prev = head;
 	}
 	else {
@@ -210,19 +220,18 @@ void accessData(mem_addr_t addr) {
 	  head = currLine;
 	}
       }
-      if (E == 2) {
+      else if (E == 2) { 
 	if (currLine == tail) {
           tail->next = head;
 	  head->prev = tail;
-	  newTail = tail->prev;
-	  newTail->next = NULL;
-	  tail->prev = NULL;
-	  tail = newTail;
-	  head = head->prev;
+	  head = head->next;
+	  tail = tail->next;
+	  head->prev = NULL;
+	  tail->next = NULL;
 	}
 	else {
-          head->next = (cache_line_t *)currLine+1;
-          (head->next)->prev = head;
+          head->next = tail;
+          tail->prev = head;
 	}
       }
       *(cache + setIdx) = head;  
@@ -237,22 +246,28 @@ void accessData(mem_addr_t addr) {
     currLine = currLine->next;  
   }
   
-  //TODO 4: Fix and optimize the cache eviction case
-  //TODO 5: Test eviction case, cry, gdb, etc...
-  //
+  //***In both cache hits and cache misses (colds), you set tail->prev to NULL. 
+  //Your best solution would be to edit these two cases tomorrow night (yay for Fridays) and fix this.
   //Cache eviction:
   if (linesTaken == E) {
-    if (E > 1) {
+    if (E > 2) {
       //Replace old data with new data:
-      tail->tag = tbits;  
-      
+      tail->tag = tbits;
       tail->next = head;
       head->prev = tail;
-      newTail = tail->prev;
-      newTail->next = NULL;
-      tail->prev = NULL;
-      tail = newTail;
       head = head->prev;
+      tail = tail->prev;
+      head->prev = NULL;
+      tail->next = NULL;   
+    }
+    else if (E == 2) {
+      tail->tag = tbits;
+      tail->next = head;
+      head->prev = tail;
+      head = head->next;
+      tail = tail->next;
+      head->prev = NULL;
+      tail->next = NULL;
     }
     else { 
       head->tag = tbits;
