@@ -121,6 +121,7 @@ void freeCache() {
     }
   } 
   free(cache);
+  cache = NULL;
 }
 
 /* 
@@ -138,36 +139,32 @@ void accessData(mem_addr_t addr) {
   mem_addr_t setIdx_2 = addr << t;
   mem_addr_t setIdx = setIdx_2 >> (t + b);
   
-  //Various pointer to our linkedlist:
-  cache_line_t *currLine; 
-  cache_line_t *head;   
-  cache_line_t *tail;  
-  cache_line_t *newTail;  
+  //Pointers to doubly linked list for updating cache:
+  cache_line_t *currLine = &cache[setIdx][0]; 
+  cache_line_t *head = &cache[setIdx][0];   
+  cache_line_t *tail = &cache[setIdx][E-1];  
   
-  //Initializing the head, tail, and curr pointers: 
-  head = &cache[setIdx][0]; 
-  tail = &cache[setIdx][E-1];
-  currLine = &cache[setIdx][0];  
-
   //TODO 3: Test, use gdb, cry, rinse and repeat.
   //Iterating through the lines of respective set:
   while (currLine != NULL) {    
-     //Cache hit:
+    //Cache hit:
     if (tbits == currLine->tag) { 
-      if (E > 2) { 
- 	if (currLine == tail) {
-	  tail->next = head;
-	  head->prev = tail;
-	  newTail = tail->prev;
-	  newTail->next = NULL;
-	  tail->prev = NULL;
-	  tail = newTail;
-	  head = head->prev;
+       if (E > 2) { 
+	if (currLine == tail) {
+          tail->next = head;
+          head->prev = tail;
+          head = head->prev;
+          tail = tail->prev;
+          head->prev = NULL;
+          tail->next = NULL;   
 	}	
 	else if (currLine != head && currLine != tail) {
 	  (currLine->prev)->next = currLine->next;
 	  (currLine->next)->prev = currLine->prev; 
 	  currLine->next = head;
+	  //FIXME: WHat if we are line 2, right infront of head,
+	  //and then we set currLine->prev to NULL,
+	  //thus setting head to NULL...
 	  currLine->prev = NULL;
 	  head->prev = currLine;
 	  head = currLine;  
@@ -183,8 +180,9 @@ void accessData(mem_addr_t addr) {
 	  tail->next = NULL;
 	}
       }
+      //No need to update linked list when E = 1.
       //Updating the cache:
-      *(cache + setIdx) = head; 
+      *(cache + setIdx) = head;  
       hit_cnt++;
     }
     
@@ -193,31 +191,29 @@ void accessData(mem_addr_t addr) {
       //Create the line with its data:
       currLine->tag = tbits;	
       currLine->valid = 1;
-
+      
       if (E > 2) {
         if (currLine == tail) {
-	  tail->next = head;
-	  head->prev = tail;
-	  newTail = tail->prev;
-	  newTail->next = NULL;
-	  printf("E > 2, how is this possible?\n");
-	  tail->prev = NULL; //FIXME here for l8r as well. 3
-	  tail = newTail;
-	  head = head->prev;
+          tail->next = head;
+          head->prev = tail;
+          head = head->prev;
+          tail = tail->prev;
+          head->prev = NULL;
+          tail->next = NULL;   
         }
 	else if (currLine == head) {
 	  head->next = (cache_line_t *)currLine+1; 
-          (head->next)->prev = head;
+          (head->next)->prev = head; 
 	}
 	else {
-	  //Backup node pointer to keep list intact.
-	  cache_line_t *prevNode; 
+	  cache_line_t *prevNode;  //Extra pointer to keep list intact. 
 	  prevNode = currLine->prev;
 	  prevNode->next = (cache_line_t *)currLine+1;
-	  (prevNode->next)->prev = prevNode;
+	  (prevNode->next)->prev = prevNode; 
 	  currLine->next = head;
-	  currLine->prev = NULL;
+	  head->prev = currLine;
 	  head = currLine;
+	  head->prev = NULL;
 	}
       }
       else if (E == 2) { 
@@ -236,19 +232,18 @@ void accessData(mem_addr_t addr) {
       }
       *(cache + setIdx) = head;  
       miss_cnt++;
-      break;  
+      break;    //TODO understand ur ctrl flow better, and try removing this.
     }
     
     //Increase the chance for an eviction:
     else {
       linesTaken++;
     }
+    //Move to the next successive line in cache:
     currLine = currLine->next;  
   }
   
-  //***In both cache hits and cache misses (colds), you set tail->prev to NULL. 
-  //Your best solution would be to edit these two cases tomorrow night (yay for Fridays) and fix this.
-  //Cache eviction:
+  //Cache eviction from tail, or from head if E = 1:
   if (linesTaken == E) {
     if (E > 2) {
       //Replace old data with new data:
@@ -269,7 +264,7 @@ void accessData(mem_addr_t addr) {
       head->prev = NULL;
       tail->next = NULL;
     }
-    else { 
+    else {
       head->tag = tbits;
     }
     *(cache + setIdx) = head;
