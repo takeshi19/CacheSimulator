@@ -31,7 +31,7 @@
 
 /****************************************************************************/
 /***** DO NOT MODIFY THESE VARIABLE NAMES ***********************************/
-
+//TODO TODO better comments TODO TODO 
 /* Globals set by command line args */
 int s = 0; /* set index bits */
 int E = 0; /* associativity */
@@ -50,19 +50,15 @@ int evict_cnt = 0;
 /*****************************************************************************/
 
 
-/* Type: Memory address 
+/* Type: Memory address
+ * TODO better comments 
  * Use this type whenever dealing with addresses or address masks
  */
 typedef unsigned long long int mem_addr_t;
 
 /* Type: Cache line
  * 
- * NOTE: 
- * You might (not necessarily though) want to add an extra field to this struct
- * depending on your implementation
- * 
- * For example, to use a linked list based LRU,
- * you might want to have a field "struct cache_line * next" in the struct 
+ * TODO better comments 
  */
 typedef struct cache_line {                     
     int valid;  
@@ -73,55 +69,61 @@ typedef struct cache_line {
 
 //Pointer to the set, then the double pointer to the line within the set.
 typedef cache_line_t* cache_set_t;
-typedef cache_set_t* cache_t;//TODO idk if the above commt is valid, but ill findout later.
+typedef cache_set_t* cache_t;
 
 //The cache we are simulating (a double pointer):
 cache_t cache;  
 
 /* 
- * initCache - TODO fixx all of this shitty broken code please. 
- * Allocate data structures to hold info regrading the sets and cache lines
- * use struct "cache_line_t" here
+ * initCache - 
+ * Allocate data structures to hold info regrading the sets and cache lines.
  * Initialize valid and tag field with 0s.
- * use S (= 2^s) and E while allocating the data structures here
+ * prev and head pointers of the doubly linked list are nulled.
  */
-void initCache() {
+void initCache() 
+{
   //cache represents a cache of S sets, E lines (2D array).                         
   S = pow(s, 2);
-  //Now we have S set pointers:
-  cache = malloc(sizeof(cache_set_t) * S);
+  printf("This is the size of the cache_line_t struct:");
+  printf("%ld\n", sizeof(cache_line_t));
+
+  cache = (cache_line_t**)malloc(sizeof(cache_line_t) * S * E);
+  printf("This is the size of the cache, itself:");
+  printf("%ld\n", sizeof(cache));
   
-  int i, j;  
-  for (i = 0; i < S; i++) { 
-    *(cache + i) = malloc(sizeof(cache_line_t) * E);
-    for (j = 0; j < E; j++) {
-      (*(*(cache + i) + j)).tag = 0;
-      (*(*(cache + i) + j)).valid = 0;
-      (*(*(cache + i) + j)).next = NULL; 
-      (*(*(cache + i) + j)).prev = NULL; 
-    } 
+  for (int j = 0; j < E; j++) { 
+    for (int s = 0; s < S; s++) {
+      printf("set counter: %d, line counter: %d\n", j, s);
+      (*(cache + s + j*S)) = 0;
+     // (*(cache + s + j*S)).valid = 0;
+     // (*(cache + s + j*S)).next  = NULL;
+     // (*(cache + s + j*S)).prev  = NULL;
+    }
   }
+   /*
+ // cache = malloc(sizeof(cache_set_t) * S);
+  for (int i = 0; i < E; i++) { 
+    *(cache + i) = malloc(sizeof(cache_line_t) * E);
+    for (int j = 0; j < S; j++) {
+      (*(*(cache + j) + i*S)).tag = 0;
+      (*(*(cache + j) + i*S)).valid = 0;
+      (*(*(cache + j) + i*S)).next = NULL; 
+      (*(*(cache + j) + i*S)).prev = NULL; 
+    } 
+  }*/
 }
 
 /*  
- * freeCache - free each piece of memory you allocated using malloc 
- * inside initCache() function
+ * freeCache - 
+ * Free each piece of dynamically allocated memory in cache.
  */
-void freeCache() {                      
-  int i;
-  cache_line_t *curr = NULL;
-  cache_line_t *next =  curr;
-
-  for (i = 0; i < S; i++) {
-    curr = &cache[i][0];
-    while (next != NULL) {
-      next = curr->next;
-      free(curr);
-      curr = next;
-    }
-  } 
+void freeCache() 
+{ 
+  for (int i = 0; i < S; i++) {
+    free(*(cache + i));
+  }
   free(cache);
-  cache = NULL;
+  cache = NULL;  
 }
 
 /* 
@@ -144,7 +146,6 @@ void accessData(mem_addr_t addr) {
   cache_line_t *head = &cache[setIdx][0];   
   cache_line_t *tail = &cache[setIdx][E-1];  
   
-  //TODO 3: Test, use gdb, cry, rinse and repeat.
   //Iterating through the lines of respective set:
   while (currLine != NULL) {    
     //Cache hit:
@@ -230,9 +231,10 @@ void accessData(mem_addr_t addr) {
           tail->prev = head;
 	}
       }
+    
       *(cache + setIdx) = head;  
       miss_cnt++;
-      break;    //TODO understand ur ctrl flow better, and try removing this.
+      break;   
     }
     
     //Increase the chance for an eviction:
