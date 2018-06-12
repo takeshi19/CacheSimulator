@@ -29,9 +29,6 @@
 #include <errno.h>
 #include <stdbool.h>
 
-/****************************************************************************/
-/***** DO NOT MODIFY THESE VARIABLE NAMES ***********************************/
-//TODO TODO better comments TODO TODO 
 /* Globals set by command line args */
 int s = 0; /* set index bits */
 int E = 0; /* associativity */
@@ -50,15 +47,16 @@ int evict_cnt = 0;
 /*****************************************************************************/
 
 
-/* Type: Memory address
- * TODO better comments 
- * Use this type whenever dealing with addresses or address masks
+/* 
+ * Data type when dealing with addresses in loads and stores, as
+ * well as address masks.
  */
 typedef unsigned long long int mem_addr_t;
 
-/* Type: Cache line
- * 
- * TODO better comments 
+/* 
+ * A struct that represent each line in the
+ * cache. Contains a head and prev pointer for doubly
+ * linked list implementation.  
  */
 typedef struct cache_line {                     
     int valid;  
@@ -71,7 +69,7 @@ typedef struct cache_line {
 typedef cache_line_t* cache_set_t;
 typedef cache_set_t* cache_t;
 
-//The cache we are simulating (a double pointer):
+//The cache we are simulating:
 cache_t cache;  
 
 /* 
@@ -84,34 +82,29 @@ void initCache()
 {
   //cache represents a cache of S sets, E lines (2D array).                         
   S = pow(s, 2);
-  printf("This is the size of the cache_line_t struct:");
-  printf("%ld\n", sizeof(cache_line_t));
-
-  cache = (cache_line_t**)malloc(sizeof(cache_line_t) * S * E);
-  printf("This is the size of the cache, itself:");
-  printf("%ld\n", sizeof(cache));
+  B = pow(b, 2);
+  cache = malloc(sizeof(cache_set_t) * S); 
   
-  for (int j = 0; j < E; j++) { 
-    for (int s = 0; s < S; s++) {
-      printf("set counter: %d, line counter: %d\n", j, s);
-      (*(cache + s + j*S)) = 0;
-     // (*(cache + s + j*S)).valid = 0;
-     // (*(cache + s + j*S)).next  = NULL;
-     // (*(cache + s + j*S)).prev  = NULL;
+  for (int i = 0; i < S; i++) {
+    cache_line_t *currline = malloc(sizeof(cache_line_t));
+    currline->tag = 0;
+    currline->valid = 0;
+    currline->prev = NULL; //head nodes sets have prev as NULL.
+    *(cache + i) = currline;
+
+    for (int j = 1; j < E; j++) {
+      cache_line_t *nextline = malloc(sizeof(cache_line_t));
+      nextline->tag = 0;
+      nextline->valid = 0;
+      //Linking the nodes.
+      currline->next = nextline; 
+      nextline->prev = currline;
+      currline = currline->next;
     }
+    currline->next = NULL; //tail nodes of sets have next as NULL. 
   }
-   /*
- // cache = malloc(sizeof(cache_set_t) * S);
-  for (int i = 0; i < E; i++) { 
-    *(cache + i) = malloc(sizeof(cache_line_t) * E);
-    for (int j = 0; j < S; j++) {
-      (*(*(cache + j) + i*S)).tag = 0;
-      (*(*(cache + j) + i*S)).valid = 0;
-      (*(*(cache + j) + i*S)).next = NULL; 
-      (*(*(cache + j) + i*S)).prev = NULL; 
-    } 
-  }*/
 }
+
 
 /*  
  * freeCache - 
@@ -119,12 +112,39 @@ void initCache()
  */
 void freeCache() 
 { 
+  cache_line_t *curr = NULL;
+  cache_line_t *next =  curr;
+
   for (int i = 0; i < S; i++) {
-    free(*(cache + i));
+    curr = &cache[i][0];
+    while (next != NULL) {
+      next = curr->next;
+      free(curr);
+      curr = next;
+    }
   }
   free(cache);
-  cache = NULL;  
+  cache = NULL;
 }
+
+
+//TODO comments
+void updateFromTail(currLine, head, tail) 
+{
+  tail->next = head;
+  head->prev = tail;
+  head = head->prev;
+  tail = tail->prev;
+  head->prev = NULL;
+  tail->next = NULL;   
+}
+
+//TODO comments
+void updateInbetween(head, tail) 
+{
+
+}
+
 
 /* 
  * accessData - Access data at memory address addr.
@@ -132,14 +152,17 @@ void freeCache()
  *   If it is not in cache, bring it in cache, increase miss count (cold miss).
  *   Also increase evict_cnt if a line is evicted (capacity or conflict miss).
  */
-void accessData(mem_addr_t addr) {                      
+void accessData(mem_addr_t addr) 
+{                      
   int linesTaken = 0;  
   mem_addr_t tbits = addr >> (s + b); 
-  
+  int x  = 0; //TODO deleet when dun.
   //Extracting the set index bits:
   int t = 64 - (b + s);
   mem_addr_t setIdx_2 = addr << t;
   mem_addr_t setIdx = setIdx_2 >> (t + b);
+  
+  printf("%llu is the setidx\n", setIdx); 
   
   //Pointers to doubly linked list for updating cache:
   cache_line_t *currLine = &cache[setIdx][0]; 
@@ -150,9 +173,11 @@ void accessData(mem_addr_t addr) {
   while (currLine != NULL) {    
     //Cache hit:
     if (tbits == currLine->tag) { 
-       if (E > 2) { 
+      if (E > 2) { 
 	if (currLine == tail) {
-          tail->next = head;
+          printf("hit on donkey butt\n");
+	  //updateFromTail(currLine, tail, head);
+	  tail->next = head;
           head->prev = tail;
           head = head->prev;
           tail = tail->prev;
@@ -160,19 +185,20 @@ void accessData(mem_addr_t addr) {
           tail->next = NULL;   
 	}	
 	else if (currLine != head && currLine != tail) {
+	  printf("%d\n", x);
+	  printf("hit inbtwn the legs\n");
+	  //updateInbetween(currLine, head);
 	  (currLine->prev)->next = currLine->next;
 	  (currLine->next)->prev = currLine->prev; 
 	  currLine->next = head;
-	  //FIXME: WHat if we are line 2, right infront of head,
-	  //and then we set currLine->prev to NULL,
-	  //thus setting head to NULL...
-	  currLine->prev = NULL;
 	  head->prev = currLine;
-	  head = currLine;  
+	  head = currLine;
+	  head->prev = NULL;
 	}
       }
       else if (E == 2) {  
 	if (currLine == tail) {
+	 //updateFromTail(currLine, tail, head);
 	  tail->next = head;
 	  head->prev = tail;
 	  head = head->next;
@@ -185,6 +211,7 @@ void accessData(mem_addr_t addr) {
       //Updating the cache:
       *(cache + setIdx) = head;  
       hit_cnt++;
+      break;
     }
     
     //Cold miss:
@@ -192,43 +219,40 @@ void accessData(mem_addr_t addr) {
       //Create the line with its data:
       currLine->tag = tbits;	
       currLine->valid = 1;
-      
       if (E > 2) {
+	    printf("We are at coldmiss case\n");
         if (currLine == tail) {
-          tail->next = head;
+          printf("Currline points to tail\n");
+	 //updateFromTail(currLine, tail, head);
+	  tail->next = head;
           head->prev = tail;
           head = head->prev;
           tail = tail->prev;
           head->prev = NULL;
           tail->next = NULL;   
         }
-	else if (currLine == head) {
-	  head->next = (cache_line_t *)currLine+1; 
-          (head->next)->prev = head; 
-	}
-	else {
-	  cache_line_t *prevNode;  //Extra pointer to keep list intact. 
-	  prevNode = currLine->prev;
-	  prevNode->next = (cache_line_t *)currLine+1;
-	  (prevNode->next)->prev = prevNode; 
+	else if (currLine != tail && currLine != head) {
+	  printf("currline is inbtwn\n");
+	  //updateInbetween(currLine, head);
+     	  (currLine->prev)->next = currLine->next; 
+	  (currLine->next)->prev = currLine->prev; 
 	  currLine->next = head;
 	  head->prev = currLine;
 	  head = currLine;
 	  head->prev = NULL;
 	}
+	else
+		printf("currline is head\n");
       }
       else if (E == 2) { 
 	if (currLine == tail) {
+	 //updateFromTail(currLine, tail, head);
           tail->next = head;
 	  head->prev = tail;
 	  head = head->next;
 	  tail = tail->next;
 	  head->prev = NULL;
 	  tail->next = NULL;
-	}
-	else {
-          head->next = tail;
-          tail->prev = head;
 	}
       }
     
@@ -240,6 +264,7 @@ void accessData(mem_addr_t addr) {
     //Increase the chance for an eviction:
     else {
       linesTaken++;
+      printf("skip a line\n");
     }
     //Move to the next successive line in cache:
     currLine = currLine->next;  
@@ -249,7 +274,12 @@ void accessData(mem_addr_t addr) {
   if (linesTaken == E) {
     if (E > 2) {
       //Replace old data with new data:
+      //FIXME segault at 'tail = tail->prev;' bc tail is null...
+      if (tail->prev == NULL)
+        printf("tail prev is null\n");
+      printf("We are at eviction case\n");
       tail->tag = tbits;
+      //updateFromTail(currLine, tail, head);
       tail->next = head;
       head->prev = tail;
       head = head->prev;
@@ -259,6 +289,7 @@ void accessData(mem_addr_t addr) {
     }
     else if (E == 2) {
       tail->tag = tbits;
+      //updateFromTail(currLine, tail, head);
       tail->next = head;
       head->prev = tail;
       head = head->next;
@@ -286,7 +317,8 @@ void accessData(mem_addr_t addr) {
  * YOU MUST TRANSLATE one "S" as a store i.e. 1 memory access
  * YOU MUST TRANSLATE one "M" as a load followed by a store i.e. 2 memory accesses 
  */
-void replayTrace(char* trace_fn) {                      
+void replayTrace(char* trace_fn) 
+{                      
     char buf[1000];
     mem_addr_t addr = 0;  
     unsigned int len = 0;
@@ -324,7 +356,8 @@ void replayTrace(char* trace_fn) {
 /*
  * printUsage - Print usage info
  */
-void printUsage(char* argv[]) {                 
+void printUsage(char* argv[]) 
+{                 
     printf("Usage: %s [-hv] -s <num> -E <num> -b <num> -t <file>\n", argv[0]);
     printf("Options:\n");
     printf("  -h         Print this help message.\n");
@@ -343,7 +376,8 @@ void printUsage(char* argv[]) {
  * printSummary - Summarize the cache simulation statistics. Student cache simulators
  *                must call this function in order to be properly autograded.
  */
-void printSummary(int hits, int misses, int evictions) {                        
+void printSummary(int hits, int misses, int evictions) 
+{                        
     printf("hits:%d misses:%d evictions:%d\n", hits, misses, evictions);
     FILE* output_fp = fopen(".csim_results", "w");
     assert(output_fp);
@@ -354,7 +388,8 @@ void printSummary(int hits, int misses, int evictions) {
 /*
  * main - Main routine 
  */
-int main(int argc, char* argv[]) {                      
+int main(int argc, char* argv[]) 
+{                      
     char c;
     
     // Parse the command line arguments: -h, -v, -s, -E, -b, -t 
