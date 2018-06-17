@@ -72,6 +72,7 @@ typedef cache_set_t* cache_t;
 //The cache we are simulating:
 cache_t cache;  
 
+
 /* 
  * initCache - 
  * Allocate data structures to hold info regrading the sets and cache lines.
@@ -89,7 +90,6 @@ void initCache()
     cache_line_t *currline = malloc(sizeof(cache_line_t));
     currline->tag = 0;
     currline->valid = 0;
-    currline->prev = NULL; //head nodes sets have prev as NULL.
     *(cache + i) = currline;
 
     for (int j = 1; j < E; j++) {
@@ -98,10 +98,12 @@ void initCache()
       nextline->valid = 0;
       //Linking the nodes.
       currline->next = nextline; 
-      nextline->prev = currline;
       currline = currline->next;
     }
-    currline->next = NULL; //tail nodes of sets have next as NULL. 
+    //FIXME u probably null out currline
+    currline->next = NULL; //tail nodes of sets have next as NULL.
+   if (currline == NULL) 
+	  printf("Currline is null in initCache()\n"); 
   }
 }
 
@@ -116,7 +118,7 @@ void freeCache()
   cache_line_t *next =  curr;
 
   for (int i = 0; i < S; i++) {
-    curr = &cache[i][0];
+    curr = *(cache + i);
     while (next != NULL) {
       next = curr->next;
       free(curr);
@@ -128,21 +130,21 @@ void freeCache()
 }
 
 
-//TODO comments
-void updateFromTail(currLine, head, tail) 
-{
-  tail->next = head;
-  head->prev = tail;
-  head = head->prev;
-  tail = tail->prev;
-  head->prev = NULL;
-  tail->next = NULL;   
-}
-
-//TODO comments
-void updateInbetween(head, tail) 
-{
-
+/*
+ * Update the linked list if we have a hit, eviction, or miss 
+ * from any of the nodes (head, tail, or in between). This
+ * node becomes the head- following the LRU policy.
+ */
+cache_line_t* updateList(cache_line_t *head, cache_line_t *curr, 
+  cache_line_t *prev) 
+{   
+  while (prev->next != curr) {
+    prev = (prev)->next;
+  }
+  prev->next = curr->next;
+  curr->next = head;
+  head = curr;
+  return head;
 }
 
 
@@ -153,154 +155,73 @@ void updateInbetween(head, tail)
  *   Also increase evict_cnt if a line is evicted (capacity or conflict miss).
  */
 void accessData(mem_addr_t addr) 
-{                      
+{               
+  //Counter to number of lines taken to do a possible
+  //eviction, and also the tag bits of our address.	
   int linesTaken = 0;  
   mem_addr_t tbits = addr >> (s + b); 
-  int x  = 0; //TODO deleet when dun.
+  
   //Extracting the set index bits:
   int t = 64 - (b + s);
   mem_addr_t setIdx_2 = addr << t;
   mem_addr_t setIdx = setIdx_2 >> (t + b);
   
-  printf("%llu is the setidx\n", setIdx); 
-  
-  //Pointers to doubly linked list for updating cache:
+  //Pointers to linked list for updating cache.
   cache_line_t *currLine = &cache[setIdx][0]; 
   cache_line_t *head = &cache[setIdx][0];   
+  cache_line_t *prev = &cache[setIdx][0];
   cache_line_t *tail = &cache[setIdx][E-1];  
   
-  //Iterating through the lines of respective set:
+  //Iterating through the lines of respective set.
   while (currLine != NULL) {    
-    //Cache hit:
-    if (tbits == currLine->tag) { 
-      if (E > 2) { 
-	if (currLine == tail) {
-          printf("hit on donkey butt\n");
-	  //updateFromTail(currLine, tail, head);
-	  tail->next = head;
-          head->prev = tail;
-          head = head->prev;
-          tail = tail->prev;
-          head->prev = NULL;
-          tail->next = NULL;   
-	}	
-	else if (currLine != head && currLine != tail) {
-	  printf("%d\n", x);
-	  printf("hit inbtwn the legs\n");
-	  //updateInbetween(currLine, head);
-	  (currLine->prev)->next = currLine->next;
-	  (currLine->next)->prev = currLine->prev; 
-	  currLine->next = head;
-	  head->prev = currLine;
-	  head = currLine;
-	  head->prev = NULL;
-	}
+    //**Cache hit.**
+    if (tbits == currLine->tag) {
+      //No need to reorder linked list if hit on head or if E = 1.
+      if (E == 1 || currLine == head) {
+	cache[setIdx] = head;
       }
-      else if (E == 2) {  
-	if (currLine == tail) {
-	 //updateFromTail(currLine, tail, head);
-	  tail->next = head;
-	  head->prev = tail;
-	  head = head->next;
-	  tail = tail->next;
-	  head->prev = NULL;
-	  tail->next = NULL;
-	}
+      //Else, reorder linked list.
+      else { 
+        cache[setIdx] = updateList(head, currLine, prev);
       }
-      //No need to update linked list when E = 1.
-      //Updating the cache:
-      *(cache + setIdx) = head;  
       hit_cnt++;
       break;
     }
     
-    //Cold miss:
+    //**Cold miss.**
     else if (currLine->valid == 0) {
-      //Create the line with its data:
-      currLine->tag = tbits;	
+      //Create the line with its data.
       currLine->valid = 1;
-      if (E > 2) {
-	    printf("We are at coldmiss case\n");
-        if (currLine == tail) {
-          printf("Currline points to tail\n");
-	 //updateFromTail(currLine, tail, head);
-	  tail->next = head;
-          head->prev = tail;
-          head = head->prev;
-          tail = tail->prev;
-          head->prev = NULL;
-          tail->next = NULL;   
-        }
-	else if (currLine != tail && currLine != head) {
-	  printf("currline is inbtwn\n");
-	  //updateInbetween(currLine, head);
-     	  (currLine->prev)->next = currLine->next; 
-	  (currLine->next)->prev = currLine->prev; 
-	  currLine->next = head;
-	  head->prev = currLine;
-	  head = currLine;
-	  head->prev = NULL;
-	}
-	else
-		printf("currline is head\n");
+      currLine->tag = tbits;
+      
+      if (E == 1 || currLine == head) {
+	cache[setIdx] = head;
       }
-      else if (E == 2) { 
-	if (currLine == tail) {
-	 //updateFromTail(currLine, tail, head);
-          tail->next = head;
-	  head->prev = tail;
-	  head = head->next;
-	  tail = tail->next;
-	  head->prev = NULL;
-	  tail->next = NULL;
-	}
+      else { 
+        cache[setIdx] = updateList(head, currLine, prev);
       }
-    
-      *(cache + setIdx) = head;  
       miss_cnt++;
       break;   
     }
     
-    //Increase the chance for an eviction:
+    //Increase the chance for an eviction.
     else {
       linesTaken++;
-      printf("skip a line\n");
     }
     //Move to the next successive line in cache:
     currLine = currLine->next;  
   }
-  
-  //Cache eviction from tail, or from head if E = 1:
+
+  //**Cache eviction from tail, or from head if E = 1.**
   if (linesTaken == E) {
-    if (E > 2) {
-      //Replace old data with new data:
-      //FIXME segault at 'tail = tail->prev;' bc tail is null...
-      if (tail->prev == NULL)
-        printf("tail prev is null\n");
-      printf("We are at eviction case\n");
+    if (E > 1) {
       tail->tag = tbits;
-      //updateFromTail(currLine, tail, head);
-      tail->next = head;
-      head->prev = tail;
-      head = head->prev;
-      tail = tail->prev;
-      head->prev = NULL;
-      tail->next = NULL;   
-    }
-    else if (E == 2) {
-      tail->tag = tbits;
-      //updateFromTail(currLine, tail, head);
-      tail->next = head;
-      head->prev = tail;
-      head = head->next;
-      tail = tail->next;
-      head->prev = NULL;
-      tail->next = NULL;
+      cache[setIdx] = updateList(head, currLine, prev);
     }
     else {
       head->tag = tbits;
+      cache[setIdx] = head;
     }
-    *(cache + setIdx) = head;
     //Evictions also infer cache misses: 
     evict_cnt++;
     miss_cnt++;
