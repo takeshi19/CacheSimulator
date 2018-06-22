@@ -59,10 +59,9 @@ typedef unsigned long long int mem_addr_t;
  * linked list implementation.  
  */
 typedef struct cache_line {                     
-    int valid;  
-    mem_addr_t tag;
-    struct cache_line * next;
-    struct cache_line * prev;
+  int valid;  
+  mem_addr_t tag;
+  struct cache_line* next;
 } cache_line_t;
 
 //Pointer to the set, then the double pointer to the line within the set.
@@ -91,7 +90,6 @@ void initCache()
     currline->tag = 0;
     currline->valid = 0;
     *(cache + i) = currline;
-
     for (int j = 1; j < E; j++) {
       cache_line_t *nextline = malloc(sizeof(cache_line_t));
       nextline->tag = 0;
@@ -100,11 +98,8 @@ void initCache()
       currline->next = nextline; 
       currline = currline->next;
     }
-    //FIXME u probably null out currline
     currline->next = NULL; //tail nodes of sets have next as NULL.
-   if (currline == NULL) 
-	  printf("Currline is null in initCache()\n"); 
-  }
+   }
 }
 
 
@@ -135,11 +130,16 @@ void freeCache()
  * from any of the nodes (head, tail, or in between). This
  * node becomes the head- following the LRU policy.
  */
-cache_line_t* updateList(cache_line_t *head, cache_line_t *curr, 
-  cache_line_t *prev) 
-{   
+cache_line_t* updateList(cache_line_t *head, cache_line_t *curr) 
+{ 
+  //No need to update the list when E = 1 and/or curr points to head.
+  if (curr == head) {
+    return head;
+  }
+  //Else, update the list: newest node as head, oldest node as tail.
+  cache_line_t *prev = head;
   while (prev->next != curr) {
-    prev = (prev)->next;
+    prev = prev->next;
   }
   prev->next = curr->next;
   curr->next = head;
@@ -156,8 +156,7 @@ cache_line_t* updateList(cache_line_t *head, cache_line_t *curr,
  */
 void accessData(mem_addr_t addr) 
 {               
-  //Counter to number of lines taken to do a possible
-  //eviction, and also the tag bits of our address.	
+  //Record # of lines for a possible eviction, also calculate the tag bits.
   int linesTaken = 0;  
   mem_addr_t tbits = addr >> (s + b); 
   
@@ -167,23 +166,15 @@ void accessData(mem_addr_t addr)
   mem_addr_t setIdx = setIdx_2 >> (t + b);
   
   //Pointers to linked list for updating cache.
-  cache_line_t *currLine = &cache[setIdx][0]; 
-  cache_line_t *head = &cache[setIdx][0];   
-  cache_line_t *prev = &cache[setIdx][0];
-  cache_line_t *tail = &cache[setIdx][E-1];  
+  cache_line_t *currLine = &(cache[setIdx][0]); 
+  cache_line_t *head = &(cache[setIdx][0]);
   
   //Iterating through the lines of respective set.
   while (currLine != NULL) {    
     //**Cache hit.**
     if (tbits == currLine->tag) {
-      //No need to reorder linked list if hit on head or if E = 1.
-      if (E == 1 || currLine == head) {
-	cache[setIdx] = head;
-      }
       //Else, reorder linked list.
-      else { 
-        cache[setIdx] = updateList(head, currLine, prev);
-      }
+      cache[setIdx] = updateList(head, currLine); 
       hit_cnt++;
       break;
     }
@@ -193,36 +184,32 @@ void accessData(mem_addr_t addr)
       //Create the line with its data.
       currLine->valid = 1;
       currLine->tag = tbits;
-      
-      if (E == 1 || currLine == head) {
-	cache[setIdx] = head;
-      }
-      else { 
-        cache[setIdx] = updateList(head, currLine, prev);
-      }
+      cache[setIdx] = updateList(head, currLine);
       miss_cnt++;
-      break;   
+     // break;   
     }
     
     //Increase the chance for an eviction.
     else {
       linesTaken++;
     }
-    //Move to the next successive line in cache:
+    //Move to the next successive line in cache.
     currLine = currLine->next;  
   }
 
   //**Cache eviction from tail, or from head if E = 1.**
   if (linesTaken == E) {
     if (E > 1) {
+      cache_line_t *tail = &(cache[setIdx][E-1]);
       tail->tag = tbits;
-      cache[setIdx] = updateList(head, currLine, prev);
+      //TODO look at this case more
+      cache[setIdx] = updateList(head, tail);
     }
     else {
       head->tag = tbits;
-      cache[setIdx] = head;
+      cache[setIdx] = updateList(head, currLine);
     }
-    //Evictions also infer cache misses: 
+    //Evictions also infer cache misses. 
     evict_cnt++;
     miss_cnt++;
   }
