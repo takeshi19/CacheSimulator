@@ -61,7 +61,7 @@ typedef unsigned long long int mem_addr_t;
 typedef struct cache_line {                     
   int valid;  
   mem_addr_t tag;
-  struct cache_line* next;
+  struct cache_line* next; 
 } cache_line_t;
 
 //Pointer to the set, then the double pointer to the line within the set.
@@ -98,7 +98,8 @@ void initCache()
       currline->next = nextline; 
       currline = currline->next;
     }
-    currline->next = NULL; //tail nodes of sets have next as NULL.
+    //The tail of linked list has next set to NULL
+    currline->next = NULL; 
    }
 }
 
@@ -136,6 +137,7 @@ cache_line_t* updateList(cache_line_t *head, cache_line_t *curr)
   if (curr == head) {
     return head;
   }
+
   //Else, update the list: newest node as head, oldest node as tail.
   cache_line_t *prev = head;
   while (prev->next != curr) {
@@ -156,69 +158,73 @@ cache_line_t* updateList(cache_line_t *head, cache_line_t *curr)
  */
 void accessData(mem_addr_t addr) 
 {               
-  //Record # of lines for a possible eviction, also calculate the tag bits.
-  int linesTaken = 0;  
-  mem_addr_t tbits = addr >> (s + b); 
+  //Extract tbits from address:
+  mem_addr_t tBits = addr >> (s + b); 
   
   //Extracting the set index bits:
-  int t = 64 - (b + s);
-  mem_addr_t setIdx_2 = addr << t;
-  mem_addr_t setIdx = setIdx_2 >> (t + b);
-  
+  mem_addr_t setIdx = addr >> b;
+  setIdx = setIdx & (S - 1);
+
   //Pointers to linked list for updating cache.
-  cache_line_t *currLine = &(cache[setIdx][0]); 
-  cache_line_t *head = &(cache[setIdx][0]);
+  cache_line_t* currLine = cache[(int)(setIdx)];
+  cache_line_t* head  = currLine; 
   
-  //Iterating through the lines of respective set.
-  while (currLine != NULL) {    
-    //**Cache hit.**
-    if (tbits == currLine->tag) {
-      //Else, reorder linked list.
-      cache[setIdx] = updateList(head, currLine); 
+  //Iterating through the lines of respective set to check if data (tbits 
+  //from address) exist in our cache, at setIdx.
+  while (currLine->next != NULL) {  
+    //Record cache hit when data is already found in cache.
+    if (currLine->tag == tBits && currLine->valid == 1) {
+      cache[(int)(setIdx)] = updateList(head, currLine); 
       hit_cnt++;
-      break;
+      return;  //No need to iterate through more lines after a hit.
     }
-    
-    //**Cold miss.**
+    //Set empty line with data if cold miss.
     else if (currLine->valid == 0) {
-      //Create the line with its data.
       currLine->valid = 1;
-      currLine->tag = tbits;
-      cache[setIdx] = updateList(head, currLine);
+      currLine->tag = tBits;
+      cache[(int)(setIdx)] = updateList(head, currLine);
       miss_cnt++;
-     // break;   
+      return;  //No need to iterate through lines after a miss.
     }
-    
-    //Increase the chance for an eviction.
-    else {
-      linesTaken++;
-    }
+     
     //Move to the next successive line in cache.
     currLine = currLine->next;  
   }
 
-  //**Cache eviction from tail, or from head if E = 1.**
-  if (linesTaken == E) {
-    if (E > 1) {
-      cache_line_t *tail = &(cache[setIdx][E-1]);
-      tail->tag = tbits;
-      //TODO look at this case more
-      cache[setIdx] = updateList(head, tail);
-    }
-    else {
-      head->tag = tbits;
-      cache[setIdx] = updateList(head, currLine);
-    }
-    //Evictions also infer cache misses. 
+  //Cache eviction from tail (since loop ends at last line) if multiple lines. 
+  if (E > 1) {
+    currLine->tag = tBits;
+    cache[(int)(setIdx)] = updateList(head, currLine);
     evict_cnt++;
     miss_cnt++;
+  }
+
+  //If E=1, then separately check for cache evictions, hits, and misses.
+  else {
+    if (currLine->tag == tBits && currLine->valid == 1) {
+      cache[(int)(setIdx)] = updateList(head, currLine); 
+      hit_cnt++;
+    }
+    else if (currLine->valid == 0) {
+      currLine->valid = 1;
+      currLine->tag = tBits;
+      cache[(int)(setIdx)] = updateList(head, currLine);
+      miss_cnt++;
+    }
+    //Evicting from head when E=1.
+    else {
+      currLine->tag = tBits;
+      cache[(int)(setIdx)] = updateList(head, currLine);
+      //Evictions also infer cache misses. 
+      evict_cnt++;
+      miss_cnt++;
+    }    
   }
 }
 
 
 /* 
- * replayTrace - replays the given trace file against the cache 
-
+ * replayTrace - replays the given trace file against the cache
  * reads the input trace file line by line
  * extracts the type of each memory access : L/S/M
  * YOU MUST TRANSLATE one "L" as a load i.e. 1 memory access
