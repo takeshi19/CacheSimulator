@@ -157,7 +157,10 @@ cache_line_t* updateList(cache_line_t *head, cache_line_t *curr)
  *   Also increase evict_cnt if a line is evicted (capacity or conflict miss).
  */
 void accessData(mem_addr_t addr) 
-{               
+{           
+  //Used to simplify cold miss cases:
+  bool isFree = false;	
+
   //Extract tbits from address:
   mem_addr_t tBits = addr >> (s + b); 
   
@@ -169,8 +172,10 @@ void accessData(mem_addr_t addr)
   cache_line_t* currLine = cache[(int)(setIdx)];
   cache_line_t* head  = currLine; 
   
-  //Iterating through the lines of respective set to check if data (tbits 
-  //from address) exist in our cache, at setIdx.
+  /*  
+   * Iterating through the lines of respective set to check if data (tbits 
+   * from address) exist in our cache.
+   */
   while (currLine->next != NULL) {  
     //Record cache hit when data is already found in cache.
     if (currLine->tag == tBits && currLine->valid == 1) {
@@ -178,47 +183,38 @@ void accessData(mem_addr_t addr)
       hit_cnt++;
       return;  //No need to iterate through more lines after a hit.
     }
-    //Set empty line with data if cold miss.
+    //Set the empty line with data if cold miss.
     else if (currLine->valid == 0) {
-      currLine->valid = 1;
-      currLine->tag = tBits;
-      cache[(int)(setIdx)] = updateList(head, currLine);
-      miss_cnt++;
-      return;  //No need to iterate through lines after a miss.
+      isFree = true;
+      break;  //No need to iterate through lines after a miss.
     }
      
     //Move to the next successive line in cache.
     currLine = currLine->next;  
   }
 
-  //Cache eviction from tail (since loop ends at last line) if multiple lines. 
-  if (E > 1) {
-    currLine->tag = tBits;
-    cache[(int)(setIdx)] = updateList(head, currLine);
-    evict_cnt++;
-    miss_cnt++;
-  }
-
-  //If E=1, then separately check for cache evictions, hits, and misses.
-  else {
-    if (currLine->tag == tBits && currLine->valid == 1) {
+  //Either a hit for E = 1 case, or an eviction for either E cases.
+  if (currLine->valid == 1) {
+    if (currLine->tag == tBits) {
       cache[(int)(setIdx)] = updateList(head, currLine); 
       hit_cnt++;
+      return;
     }
-    else if (currLine->valid == 0) {
-      currLine->valid = 1;
-      currLine->tag = tBits;
-      cache[(int)(setIdx)] = updateList(head, currLine);
-      miss_cnt++;
-    }
-    //Evicting from head when E=1.
-    else {
+    else { 
       currLine->tag = tBits;
       cache[(int)(setIdx)] = updateList(head, currLine);
       //Evictions also infer cache misses. 
       evict_cnt++;
       miss_cnt++;
-    }    
+    }
+  }    
+  
+  //Cold miss case for either E = 1 or E > 1.
+  else if (isFree || currLine->valid == 0) {
+    currLine->valid = 1;
+    currLine->tag = tBits;
+    cache[(int)(setIdx)] = updateList(head, currLine);
+    miss_cnt++;
   }
 }
 
