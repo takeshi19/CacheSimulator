@@ -44,8 +44,6 @@ int S; /* number of sets S = 2^s In C, you can use the left shift operator */
 int hit_cnt = 0;
 int miss_cnt = 0;
 int evict_cnt = 0;
-/*****************************************************************************/
-
 
 /* 
  * Data type when dealing with addresses in loads and stores, as
@@ -179,7 +177,7 @@ void accessData(mem_addr_t addr)
   while (currLine->next != NULL) {  
     //Record cache hit when data is already found in cache.
     if (currLine->tag == tBits && currLine->valid == 1) {
-      cache[(int)(setIdx)] = updateList(head, currLine); 
+      cache[(int)(setIdx)] = updateList(head, currLine);
       hit_cnt++;
       return;  //No need to iterate through more lines after a hit.
     }
@@ -196,9 +194,8 @@ void accessData(mem_addr_t addr)
   //Either a hit for E = 1 case, or an eviction for either E cases.
   if (currLine->valid == 1) {
     if (currLine->tag == tBits) {
-      cache[(int)(setIdx)] = updateList(head, currLine); 
+      cache[(int)(setIdx)] = updateList(head, currLine);
       hit_cnt++;
-      return;
     }
     else { 
       currLine->tag = tBits;
